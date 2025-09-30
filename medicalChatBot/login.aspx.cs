@@ -1,0 +1,48 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data.SqlClient;
+using System.Linq;
+using System.Web;
+using System.Web.UI;
+using System.Web.UI.WebControls;
+
+namespace medicalChatBot
+{
+    public partial class login : System.Web.UI.Page
+    {
+        string constring = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+        protected void Page_Load(object sender, EventArgs e)
+        {
+
+        }
+        protected void submitBtn_ServerClick(object sender, EventArgs e)
+        {
+            string mail = email.Value.Trim();
+            string passwordTxt = password.Value.Trim();
+            using (SqlConnection con = new SqlConnection(constring))
+            {
+                con.Open();
+                using (SqlCommand cmd = new SqlCommand("SELECT * FROM patients WHERE email = @email AND @password = password", con))
+                {
+                    cmd.Parameters.AddWithValue("@email", email.Value);
+                    cmd.Parameters.AddWithValue("@password", passwordTxt);
+                    using (SqlDataReader dr = cmd.ExecuteReader())
+                    {
+                        if (dr.Read())
+                        {
+                            Session["email"] = mail;
+                            Session["CameFromLogin"] = true;
+                            Response.Redirect("chat.aspx");
+                        }
+                        else
+                        {
+                            Response.Write("<script>alert('invalid credentials')</script>");
+                            email.Focus();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
