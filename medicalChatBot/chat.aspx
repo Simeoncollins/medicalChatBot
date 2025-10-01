@@ -128,7 +128,7 @@
         <script type="module">
     import { GoogleGenerativeAI } from "@google/generative-ai";
 
-    const API_KEY = 'AIzaSyDSeF0zmc10eq1hRzaK2DgGnloU8u73Cv0';
+    const API_KEY = 'YOUR-GEMINI-API-KEY';
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     var imageUrl = $("#imageSrc").val();
