@@ -48,7 +48,7 @@
                 <i class="fas fa-robot"></i> AI Healthcare Assistant
             </div>
             <ul class="nav-links">
-                <li><a href="login.aspx">Login</a></li>
+                <li><a href="default.aspx">Login</a></li>
             </ul>
         </nav>
     </header>

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data.SqlClient;
+using System.Data.SQLite;
 using System.Linq;
 using System.Web;
 using System.Web.UI;
@@ -11,7 +12,7 @@ namespace medicalChatBot
 {
     public partial class login : System.Web.UI.Page
     {
-        string constring = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+        
         protected void Page_Load(object sender, EventArgs e)
         {
 
@@ -20,14 +21,14 @@ namespace medicalChatBot
         {
             string mail = email.Value.Trim();
             string passwordTxt = password.Value.Trim();
-            using (SqlConnection con = new SqlConnection(constring))
+            using (SQLiteConnection con = DatabaseInitializer.GetConnection())
             {
                 con.Open();
-                using (SqlCommand cmd = new SqlCommand("SELECT * FROM patients WHERE email = @email AND @password = password", con))
+                using (SQLiteCommand cmd = new SQLiteCommand("SELECT * FROM patients WHERE email = @email AND @password = password", con))
                 {
                     cmd.Parameters.AddWithValue("@email", email.Value);
                     cmd.Parameters.AddWithValue("@password", passwordTxt);
-                    using (SqlDataReader dr = cmd.ExecuteReader())
+                    using (SQLiteDataReader dr = cmd.ExecuteReader())
                     {
                         if (dr.Read())
                         {

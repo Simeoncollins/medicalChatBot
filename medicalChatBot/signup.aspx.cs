@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data.SqlClient;
+using System.Data.SQLite;
 using System.Linq;
 using System.Web;
 using System.Web.UI;
@@ -11,7 +12,7 @@ namespace medicalChatBot
 {
     public partial class signup : System.Web.UI.Page
     {
-        string constring = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+        
         protected void submitBtn_ServerClick(object sender, EventArgs e)
         {
             validateEmail();
@@ -19,13 +20,13 @@ namespace medicalChatBot
         private void validateEmail()
         {
             string mail = email.Value.Trim();
-            using (SqlConnection con = new SqlConnection(constring))
+            using (SQLiteConnection con = DatabaseInitializer.GetConnection())
             {
                 con.Open();
-                using (SqlCommand cmd = new SqlCommand("SELECT * FROM patients WHERE email = @email", con))
+                using (SQLiteCommand cmd = new SQLiteCommand("SELECT * FROM patients WHERE email = @email", con))
                 {
                     cmd.Parameters.AddWithValue("@email", mail);
-                    using (SqlDataReader dr = cmd.ExecuteReader())
+                    using (SQLiteDataReader dr = cmd.ExecuteReader())
                     {
                         if (dr.Read())
                         {
@@ -44,27 +45,66 @@ namespace medicalChatBot
 
         private void registerUser()
         {
-            using (SqlConnection con = new SqlConnection(constring))
+            try
             {
-                con.Open();
-                using (SqlCommand cmd = new SqlCommand("INSERT INTO patients (fullname, email, dob, gender, medicalHistory, password, photoUrl) OUTPUT INSERTED.id VALUES (@fullname, @email, @dob, @gender, @medicalHistory, @password, @photoUrl)", con))
+                // Validate required fields
+                if (string.IsNullOrEmpty(fullName.Value) || string.IsNullOrEmpty(email.Value) ||
+                    string.IsNullOrEmpty(password.Value) || string.IsNullOrEmpty(dob.Value))
                 {
-                    DateTime dateObject = DateTime.Parse(dob.Value);
-                    cmd.Parameters.AddWithValue("@fullname", fullName.Value.Trim());
-                    cmd.Parameters.AddWithValue("@email", email.Value.Trim());
-                    cmd.Parameters.AddWithValue("@dob", dateObject.ToShortDateString());
-                    cmd.Parameters.AddWithValue("@gender", gender.Value.Trim());
-                    cmd.Parameters.AddWithValue("@medicalHistory", history.Value.Trim());
-                    cmd.Parameters.AddWithValue("@password", password.Value.Trim());
-                    cmd.Parameters.AddWithValue("@photoUrl", "/images/avatar.png");
-                    int newPatientId = (int)cmd.ExecuteScalar();
-                    insertConversation(newPatientId);
+                    Response.Write("<script>alert('Please fill all required fields.');</script>");
+                    return;
+                }
 
-                    Response.Write("<script>alert('Your registration is successful!');");
-                    Response.Write("window.location='login.aspx'</script>");
+                using (SQLiteConnection con = DatabaseInitializer.GetConnection())
+                {
+                    con.Open();
+
+                    // First check if email already exists
+                    using (SQLiteCommand checkCmd = new SQLiteCommand("SELECT COUNT(*) FROM patients WHERE email = @email", con))
+                    {
+                        checkCmd.Parameters.AddWithValue("@email", email.Value.Trim());
+                        int existingCount = Convert.ToInt32(checkCmd.ExecuteScalar());
+
+                        if (existingCount > 0)
+                        {
+                            Response.Write("<script>alert('Email already registered. Please use a different email.');</script>");
+                            return;
+                        }
+                    }
+
+                    // Insert new patient
+                    using (SQLiteCommand cmd = new SQLiteCommand(@"
+                INSERT INTO patients (fullname, email, dob, gender, medicalHistory, password, photoUrl) 
+                VALUES (@fullname, @email, @dob, @gender, @medicalHistory, @password, @photoUrl);
+                SELECT last_insert_rowid();", con))
+                    {
+                        DateTime dateObject = DateTime.Parse(dob.Value);
+
+                        cmd.Parameters.AddWithValue("@fullname", fullName.Value.Trim());
+                        cmd.Parameters.AddWithValue("@email", email.Value.Trim());
+                        cmd.Parameters.AddWithValue("@dob", dateObject.ToString("yyyy-MM-dd"));
+                        cmd.Parameters.AddWithValue("@gender", gender.Value.Trim());
+                        cmd.Parameters.AddWithValue("@medicalHistory", history.Value.Trim());
+                        cmd.Parameters.AddWithValue("@password", password.Value.Trim());
+                        cmd.Parameters.AddWithValue("@photoUrl", "/images/avatar.png");
+
+                        int newPatientId = Convert.ToInt32(cmd.ExecuteScalar());
+                        insertConversation(newPatientId);
+
+                        Response.Write("<script>alert('Your registration is successful!');");
+                        Response.Write("window.location='default.aspx'</script>");
+                    }
                 }
             }
-
+            catch (FormatException)
+            {
+                Response.Write("<script>alert('Invalid date format. Please use MM/DD/YYYY format.');</script>");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Registration error: {ex.Message}");
+                Response.Write("<script>alert('Registration failed. Please try again.');</script>");
+            }
         }
 
         private void insertConversation(int newPatientId)
@@ -79,14 +119,13 @@ namespace medicalChatBot
             - Respond in real time, adapt to evolving conditions, and recognize emergencies.
             - Communicate empathetically and ethically, respecting patient privacy.
 
-            You understand your role is to assist and not replace a healthcare provider.Always remind users to consult a qualified professional for final diagnoses and treatments.";
+            You understand your role is to assist and not replace a healthcare provider.Always remind users to consult a qualified professional for final diagnosis and treatments.";
             string history = getPatientHealthHistory();
-            using (SqlConnection con = new SqlConnection(constring))
+            using (SQLiteConnection con = DatabaseInitializer.GetConnection())
             {
                 con.Open();
-                using (SqlCommand cmd = new SqlCommand("INSERT INTO conversations VALUES (@patientID, @text)", con))
+                using (SQLiteCommand cmd = new SQLiteCommand("INSERT INTO conversations (patientID, [text]) VALUES (@patientID, @text)", con))
                 {
-                    DateTime dateObject = DateTime.Parse(dob.Value);
                     cmd.Parameters.AddWithValue("@patientID", newPatientId);
                     cmd.Parameters.AddWithValue("@text", instructions + "\n\n" + history + "\n\n");
                     cmd.ExecuteNonQuery();

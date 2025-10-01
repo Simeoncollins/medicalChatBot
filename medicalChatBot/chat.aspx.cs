@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data.SqlClient;
+using System.Data.SQLite;
 using System.Linq;
 using System.Web;
 using System.Web.Services;
@@ -12,13 +13,13 @@ namespace medicalChatBot
 {
     public partial class chat : System.Web.UI.Page
     {
-        string constring = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+        
         string patientid;
         protected void Page_Load(object sender, EventArgs e)
         {
             if (Session["email"] == null)
             {
-                Response.Redirect("login.aspx");
+                Response.Redirect("default.aspx");
             }
 
             if (Session["CameFromLogin"] != null && (bool)Session["CameFromLogin"] == true)
@@ -38,14 +39,14 @@ namespace medicalChatBot
 
         private void getWelcome()
         {
-            using (SqlConnection con = new SqlConnection(constring))
+            using (SQLiteConnection con = DatabaseInitializer.GetConnection())
             {
-                using (SqlCommand cmd = new SqlCommand("SELECT fullname FROM patients WHERE email = @email", con))
+                using (SQLiteCommand cmd = new SQLiteCommand("SELECT fullname FROM patients WHERE email = @email", con))
 
                 {
                     cmd.Parameters.AddWithValue("@email", Session["email"].ToString());
                     con.Open();
-                    SqlDataReader dr = cmd.ExecuteReader();
+                    SQLiteDataReader dr = cmd.ExecuteReader();
                     if (dr.Read())
                     {
                         welcome.InnerText = "Welcome, " + dr["fullname"].ToString();
@@ -57,14 +58,14 @@ namespace medicalChatBot
 
         private string getID()
         {
-            using (SqlConnection con = new SqlConnection(constring))
+            using (SQLiteConnection con = DatabaseInitializer.GetConnection())
             {
-                using (SqlCommand cmd = new SqlCommand("SELECT id FROM patients WHERE email = @email", con))
+                using (SQLiteCommand cmd = new SQLiteCommand("SELECT id FROM patients WHERE email = @email", con))
 
                 {
                     cmd.Parameters.AddWithValue("@email", Session["email"].ToString());
                     con.Open();
-                    SqlDataReader dr = cmd.ExecuteReader();
+                    SQLiteDataReader dr = cmd.ExecuteReader();
                     if (dr.Read())
                     {
                         return dr["id"].ToString();
@@ -80,16 +81,16 @@ namespace medicalChatBot
             string conversID = conversationID.Value;
             chatBox.InnerHtml = "";
 
-            using (SqlConnection conn = new SqlConnection(constring))
+            using (SQLiteConnection conn = DatabaseInitializer.GetConnection())
             {
                 string query = "SELECT * FROM Messages WHERE ConversationID = @ConversationID ORDER BY timestamp ASC";
 
-                using (SqlCommand cmd = new SqlCommand(query, conn))
+                using (SQLiteCommand cmd = new SQLiteCommand(query, conn))
                 {
                     cmd.Parameters.AddWithValue("@ConversationID", conversID);
                     conn.Open();
 
-                    SqlDataReader reader = cmd.ExecuteReader();
+                    SQLiteDataReader reader = cmd.ExecuteReader();
 
                     while (reader.Read())
                     {
@@ -133,14 +134,14 @@ namespace medicalChatBot
 
         private void getCoversation()
         {
-            using (SqlConnection con = new SqlConnection(constring))
+            using (SQLiteConnection con = DatabaseInitializer.GetConnection())
             {
-                using (SqlCommand cmd = new SqlCommand("SELECT * FROM conversations WHERE patientID = @patientID", con))
+                using (SQLiteCommand cmd = new SQLiteCommand("SELECT * FROM conversations WHERE patientID = @patientID", con))
 
                 {
                     cmd.Parameters.AddWithValue("@patientID", patientid);
                     con.Open();
-                    SqlDataReader dr = cmd.ExecuteReader();
+                    SQLiteDataReader dr = cmd.ExecuteReader();
                     if (dr.Read())
                     {
                         conversationID.Value = dr["conversationID"].ToString();
@@ -153,14 +154,14 @@ namespace medicalChatBot
 
         private string getImage()
         {
-            using (SqlConnection con = new SqlConnection(constring))
+            using (SQLiteConnection con = DatabaseInitializer.GetConnection())
             {
-                using (SqlCommand cmd = new SqlCommand("SELECT photoUrl FROM patients WHERE email = @email", con))
+                using (SQLiteCommand cmd = new SQLiteCommand("SELECT photoUrl FROM patients WHERE email = @email", con))
 
                 {
                     cmd.Parameters.AddWithValue("@email", Session["email"].ToString());
                     con.Open();
-                    SqlDataReader dr = cmd.ExecuteReader();
+                    SQLiteDataReader dr = cmd.ExecuteReader();
                     if (dr.Read())
                     {
                         return dr["photoUrl"].ToString();
@@ -172,21 +173,36 @@ namespace medicalChatBot
         }
 
         [WebMethod]
-        public static void insertMessage(string messageText, string conversationID, string sender)
+        public static bool insertMessage(string messageText, string conversationID, string sender)
         {
-            string constring = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
-            DateTime currentLocalTime = DateTime.Now.ToLocalTime();
-            using (SqlConnection con = new SqlConnection(constring))
+            if (string.IsNullOrWhiteSpace(messageText) ||
+                string.IsNullOrWhiteSpace(conversationID) ||
+                string.IsNullOrWhiteSpace(sender))
             {
-                con.Open();
-                using (SqlCommand cmd = new SqlCommand("INSERT INTO messages (conversationID, sender, messageText, timestamp) VALUES (@conversationID, @sender, @text, @timestamp)", con))
+                return false;
+            }
+
+            try
+            {
+                DateTime currentUtcTime = DateTime.UtcNow; // Use UTC
+                using (SQLiteConnection con = DatabaseInitializer.GetConnection())
                 {
-                    cmd.Parameters.AddWithValue("@conversationID", conversationID);
-                    cmd.Parameters.AddWithValue("@sender", sender);
-                    cmd.Parameters.AddWithValue("@text", messageText);
-                    cmd.Parameters.AddWithValue("@timestamp", currentLocalTime.ToString());
-                    cmd.ExecuteNonQuery();
+                    con.Open();
+                    using (SQLiteCommand cmd = new SQLiteCommand("INSERT INTO messages (conversationID, sender, messageText, timestamp) VALUES (@conversationID, @sender, @text, @timestamp)", con))
+                    {
+                        cmd.Parameters.AddWithValue("@conversationID", conversationID);
+                        cmd.Parameters.AddWithValue("@sender", sender);
+                        cmd.Parameters.AddWithValue("@text", messageText.Trim());
+                        cmd.Parameters.AddWithValue("@timestamp", currentUtcTime.ToString("yyyy-MM-dd HH:mm:ss")); // Store as UTC
+                        int rowsAffected = cmd.ExecuteNonQuery();
+                        return rowsAffected > 0;
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error inserting message: {ex.Message}");
+                return false;
             }
         }
 
@@ -194,11 +210,11 @@ namespace medicalChatBot
         [WebMethod]
         public static void updateConversation(string messageText, string conversationID)
         {
-            string constring = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
-            using (SqlConnection con = new SqlConnection(constring))
+            
+            using (SQLiteConnection con = DatabaseInitializer.GetConnection())
             {
                 con.Open();
-                using (SqlCommand cmd = new SqlCommand("UPDATE conversations SET text = @text WHERE conversationID = @conversationID", con))
+                using (SQLiteCommand cmd = new SQLiteCommand("UPDATE conversations SET text = @text WHERE conversationID = @conversationID", con))
                 {
                     cmd.Parameters.AddWithValue("@conversationID", conversationID);
                     cmd.Parameters.AddWithValue("@text", messageText);
@@ -212,7 +228,7 @@ namespace medicalChatBot
         protected void logoutBtn_Click(object sender, EventArgs e)
         {
             Session["email"] = null;
-            Response.Redirect("login.aspx");
+            Response.Redirect("default.aspx");
         }
     }
 }

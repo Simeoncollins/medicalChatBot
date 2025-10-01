@@ -86,6 +86,16 @@
                 <div id="chatBox" runat="server" class="flex-1 overflow-y-auto scroll-smooth rounded-xl bg-zinc-100 p-4 text-sm leading-6 text-zinc-900 sm:text-base sm:leading-7 dark:bg-zinc-800 dark:text-zinc-300">
                   
                 </div>
+                  <div class="flex rounded-xl bg-zinc-50 px-2 py-6 sm:px-4 dark:bg-zinc-900 thinkingTxt" style="display:none">
+                      <img class="mr-2 flex h-10 w-10 rounded-full border border-gray-200 bg-white object-contain sm:mr-4" src="images/ai.jpg">
+                      <div class="flex items-center rounded-xl">
+                          <div class="prose prose-base prose-zinc max-w-full dark:prose-invert prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h3:text-base prose-p:first:mt-0 prose-a:text-blue-600 prose-code:text-sm prose-code:text-white prose-pre:p-2">
+                              <div>
+                                  <p><i>thinking...</i></p>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
                 <div class="mt-2">
                   <div class="relative">
                       <textarea id="inputText"
@@ -120,7 +130,7 @@
 
     const API_KEY = 'AIzaSyDSeF0zmc10eq1hRzaK2DgGnloU8u73Cv0';
     const genAI = new GoogleGenerativeAI(API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     var imageUrl = $("#imageSrc").val();
     var conversationID = $("#conversationID").val(); // Gets the conversationID from the hidden input
     var conversationHistory = $("#pastConversation").val(); // Gets the conversation history from the hidden input
@@ -148,6 +158,7 @@
 
         // Handle send button click
         $('#sendRequest').click(function () {
+            $(".thinkingTxt").show();
             sendMessage();
         });
 
@@ -180,6 +191,8 @@
             model.generateContent(conversationHistory).then(result => {
                 const aiResponse = result.response.text();
                 conversationHistory += "AI: " + aiResponse + "\n";
+
+                $(".thinkingTxt").hide();
                 appendMessage('ai', aiResponse);
 
                 // Insert AI response into DB
